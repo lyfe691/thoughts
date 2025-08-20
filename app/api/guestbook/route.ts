@@ -12,7 +12,7 @@ type GuestbookRow = {
 }
 
 // In-memory fallback for local dev when Postgres isn't configured
-const memory: Array<GuestbookRow & { ip_hash?: string }> = []
+const memory: Array<GuestbookRow & { ip_hash?: string; approved?: boolean }> = []
 function useDb() {
   return Boolean(process.env.POSTGRES_URL || process.env.DATABASE_URL)
 }
@@ -24,6 +24,11 @@ if (!process.env.POSTGRES_URL && process.env.DATABASE_URL) {
 
 const MAX_LIMIT = 50
 const MAX_MESSAGE_LENGTH = 280
+
+function isAutoApprove() {
+  const v = (process.env.GUESTBOOK_AUTO_APPROVE || 'true').toLowerCase()
+  return v === '1' || v === 'true' || v === 'yes'
+}
 
 async function ensureTable() {
   if (!useDb()) return
@@ -63,6 +68,7 @@ export async function GET(req: NextRequest) {
   if (!useDb()) {
     const items = memory
       .slice()
+      .filter((a) => a.approved !== false)
       .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
       .slice(offset, offset + limit)
     return NextResponse.json({ items })
@@ -124,7 +130,7 @@ export async function POST(req: NextRequest) {
     }
 
     const id = crypto.randomUUID()
-    const row: GuestbookRow & { ip_hash: string } = {
+    const row: GuestbookRow & { ip_hash: string; approved?: boolean } = {
       id,
       name: safeName,
       message: trimmed,
@@ -132,6 +138,7 @@ export async function POST(req: NextRequest) {
       updated_at: null,
       edited: false,
       ip_hash: ipHash,
+      approved: isAutoApprove(),
     }
     memory.push(row)
     const { ip_hash, ...item } = row as any
@@ -153,10 +160,11 @@ export async function POST(req: NextRequest) {
   }
 
   const id = crypto.randomUUID()
+  const approved = isAutoApprove()
 
   const inserted = await sql<GuestbookRow>`
-    INSERT INTO guestbook (id, name, message, ip_hash)
-    VALUES (${id}, ${safeName}, ${trimmed}, ${ipHash})
+    INSERT INTO guestbook (id, name, message, ip_hash, approved)
+    VALUES (${id}, ${safeName}, ${trimmed}, ${ipHash}, ${approved})
     RETURNING id, name, message, created_at, updated_at, edited
   `
 

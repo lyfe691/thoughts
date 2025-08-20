@@ -224,7 +224,7 @@ export default function ClientGuestbook() {
                   <p className='mt-1 break-words text-rurikon-600'>{it.message}</p>
                 )}
               </div>
-              {editingId === it.id ? null : (
+              {editingId === it.id ? null : isMine(it.id) && (
                 <button
                   onClick={() => {
                     setEditingId(it.id)
