@@ -18,6 +18,7 @@ export default function ClientGuestbook() {
   const [loading, setLoading] = useState(false)
   const [hasMore, setHasMore] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
   const [name, setName] = useState('')
   const [message, setMessage] = useState('')
   const [submitting, setSubmitting] = useState(false)
@@ -70,6 +71,7 @@ export default function ClientGuestbook() {
     if (submitting) return
     setSubmitting(true)
     setError(null)
+    setNotice(null)
     try {
       const res = await fetch('/api/guestbook', {
         method: 'POST',
@@ -101,9 +103,12 @@ export default function ClientGuestbook() {
       if (created) {
         if (approved) {
           setItems((prev) => [created, ...prev])
+          setNotice('Thanks! Your message has been posted.')
         } else {
-          setError('Submitted for review. It will appear after approval.')
+          setNotice('Thanks! Your message was submitted and is pending approval.')
         }
+      } else if (!approved) {
+        setNotice('Thanks! Your message was submitted and is pending approval.')
       }
       // Best-effort refresh, but ignore failures so UI stays responsive
       fetchPage(0).catch(() => {})
@@ -189,6 +194,7 @@ export default function ClientGuestbook() {
             {submitting ? 'Sending…' : 'Send'}
           </button>
         </div>
+        {notice && <p className='text-sm text-rurikon-600'>{notice}</p>}
         {error && <p className='text-sm text-red-600'>{error}</p>}
       </form>
 
