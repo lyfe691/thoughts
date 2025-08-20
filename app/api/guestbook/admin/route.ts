@@ -1,3 +1,6 @@
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
+
 import { NextResponse, type NextRequest } from 'next/server'
 import { sql } from '@vercel/postgres'
 
@@ -24,9 +27,33 @@ function requireAdmin(req: NextRequest): NextResponse | null {
   return null
 }
 
+async function ensureTable() {
+  if (!isDb()) return
+  try {
+    await sql`
+      CREATE TABLE IF NOT EXISTS guestbook (
+        id TEXT PRIMARY KEY,
+        name TEXT,
+        message TEXT NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ,
+        edited BOOLEAN NOT NULL DEFAULT FALSE,
+        approved BOOLEAN NOT NULL DEFAULT TRUE,
+        ip_hash TEXT
+      )
+    `
+    await sql`ALTER TABLE guestbook ADD COLUMN IF NOT EXISTS approved BOOLEAN NOT NULL DEFAULT TRUE`
+    await sql`ALTER TABLE guestbook ADD COLUMN IF NOT EXISTS ip_hash TEXT`
+  } catch {
+    // ignore DDL errors
+  }
+}
+
 export async function GET(req: NextRequest) {
   const auth = requireAdmin(req)
   if (auth) return auth
+
+  await ensureTable()
 
   if (!isDb()) {
     return NextResponse.json({ items: [] })
@@ -49,6 +76,8 @@ export async function GET(req: NextRequest) {
 export async function PATCH(req: NextRequest) {
   const auth = requireAdmin(req)
   if (auth) return auth
+
+  await ensureTable()
 
   if (!isDb()) return NextResponse.json({ error: 'no_db' }, { status: 400 })
 

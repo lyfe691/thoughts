@@ -1,3 +1,6 @@
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
+
 import { NextResponse, type NextRequest } from 'next/server'
 import { sql } from '@vercel/postgres'
 import crypto from 'crypto'
@@ -32,22 +35,26 @@ function isAutoApprove() {
 
 async function ensureTable() {
   if (!useDb()) return
-  await sql`
-    CREATE TABLE IF NOT EXISTS guestbook (
-      id TEXT PRIMARY KEY,
-      name TEXT,
-      message TEXT NOT NULL,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      updated_at TIMESTAMPTZ,
-      edited BOOLEAN NOT NULL DEFAULT FALSE,
-      approved BOOLEAN NOT NULL DEFAULT TRUE,
-      ip_hash TEXT
-    );
-    ALTER TABLE guestbook ADD COLUMN IF NOT EXISTS approved BOOLEAN NOT NULL DEFAULT TRUE;
-    ALTER TABLE guestbook ADD COLUMN IF NOT EXISTS ip_hash TEXT;
-    CREATE INDEX IF NOT EXISTS guestbook_created_at_idx ON guestbook (created_at DESC);
-    CREATE INDEX IF NOT EXISTS guestbook_ip_hash_idx ON guestbook (ip_hash);
-  `
+  try {
+    await sql`
+      CREATE TABLE IF NOT EXISTS guestbook (
+        id TEXT PRIMARY KEY,
+        name TEXT,
+        message TEXT NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ,
+        edited BOOLEAN NOT NULL DEFAULT FALSE,
+        approved BOOLEAN NOT NULL DEFAULT TRUE,
+        ip_hash TEXT
+      )
+    `
+    await sql`ALTER TABLE guestbook ADD COLUMN IF NOT EXISTS approved BOOLEAN NOT NULL DEFAULT TRUE`
+    await sql`ALTER TABLE guestbook ADD COLUMN IF NOT EXISTS ip_hash TEXT`
+    await sql`CREATE INDEX IF NOT EXISTS guestbook_created_at_idx ON guestbook (created_at DESC)`
+    await sql`CREATE INDEX IF NOT EXISTS guestbook_ip_hash_idx ON guestbook (ip_hash)`
+  } catch {
+    // ignore to avoid failing requests if DDL is restricted
+  }
 }
 
 function getClientIpHash(req: NextRequest): string {
@@ -119,18 +126,7 @@ export async function POST(req: NextRequest) {
 
   const safeName = name ? String(name).slice(0, 50).trim() : null
 
-  // simple per-IP cooldown: 30 seconds
   if (!useDb()) {
-    const lastForIp = memory
-      .filter((r) => r.ip_hash === ipHash)
-      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0]
-    if (lastForIp) {
-      const last = new Date(lastForIp.created_at).getTime()
-      if (Date.now() - last < 30_000) {
-        return NextResponse.json({ error: 'rate_limited' }, { status: 429 })
-      }
-    }
-
     const id = crypto.randomUUID()
     const row: GuestbookRow & { ip_hash: string; approved?: boolean } = {
       id,
@@ -147,19 +143,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ item, approved: row.approved !== false }, { status: 201 })
   }
 
-  const recent = await sql<{ created_at: string }>`
-    SELECT created_at FROM guestbook
-    WHERE ip_hash = ${ipHash}
-    ORDER BY created_at DESC
-    LIMIT 1
-  `
-  if (recent.rows.length > 0) {
-    const last = new Date(recent.rows[0].created_at).getTime()
-    const now = Date.now()
-    if (now - last < 30_000) {
-      return NextResponse.json({ error: 'rate_limited' }, { status: 429 })
-    }
-  }
+  
 
   const id = crypto.randomUUID()
   const approved = isAutoApprove()
