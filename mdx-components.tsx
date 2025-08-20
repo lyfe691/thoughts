@@ -128,7 +128,14 @@ export const components: Record<
         />
       )
     } else {
-      const image = await import('./assets/images/' + src)
+      // Normalize src so we don't end up with duplicated prefixes like
+      // "./assets/images//assets/images/placeholder.jpg"
+      const normalizedSrc = src
+        .replace(/^\/+/, '') // remove leading slashes
+        .replace(/^assets\/images\//, '') // remove existing assets/images prefix if present
+        .split('?')[0] // strip query string if any
+        .split('#')[0] // strip hash if any
+      const image = await import('./assets/images/' + normalizedSrc)
       img = (
         <Image
           className='mt-7'
