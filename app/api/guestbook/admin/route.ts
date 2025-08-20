@@ -82,6 +82,9 @@ export async function GET(req: NextRequest) {
   const auth = requireAdmin(req)
   if (auth) return auth
 
+  const url = new URL(req.url)
+  const status = (url.searchParams.get('status') || 'pending').toLowerCase()
+
   await ensureTable()
 
   if (!isDb()) {
@@ -89,12 +92,20 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const { rows } = await sql`
-      SELECT id, name, message, created_at, updated_at, edited, approved
-      FROM guestbook
-      WHERE approved = FALSE
-      ORDER BY created_at ASC
-    `
+    const { rows } =
+      status === 'approved'
+        ? await sql`
+            SELECT id, name, message, created_at, updated_at, edited, approved
+            FROM guestbook
+            WHERE approved = TRUE
+            ORDER BY created_at DESC, id DESC
+          `
+        : await sql`
+            SELECT id, name, message, created_at, updated_at, edited, approved
+            FROM guestbook
+            WHERE approved = FALSE
+            ORDER BY created_at ASC
+          `
     return NextResponse.json({ items: rows })
   } catch {
     // Missing table or DB issue

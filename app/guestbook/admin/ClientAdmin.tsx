@@ -8,11 +8,13 @@ type AdminEntry = {
   message: string
   created_at: string
   edited: boolean
+  approved?: boolean
 }
 
 export default function ClientAdmin() {
   const [token, setToken] = useState('')
   const [items, setItems] = useState<AdminEntry[]>([])
+  const [view, setView] = useState<'pending' | 'approved'>('pending')
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
 
@@ -28,12 +30,12 @@ export default function ClientAdmin() {
     []
   )
 
-  async function load() {
+  async function load(which: 'pending' | 'approved' = view) {
     if (!token) return
     setLoading(true)
     setError(null)
     try {
-      const res = await fetch('/api/guestbook/admin', {
+      const res = await fetch(`/api/guestbook/admin?status=${which}`, {
         headers: {
           'x-admin-token': token,
           Authorization: `Bearer ${token}`,
@@ -68,7 +70,26 @@ export default function ClientAdmin() {
         const data = await res.json().catch(() => ({}))
         throw new Error(data.error || 'Failed to update')
       }
-      await load()
+      await load(view)
+    } catch (e: any) {
+      setError(e.message || 'Error')
+    }
+  }
+
+  async function remove(id: string) {
+    try {
+      const res = await fetch(`/api/guestbook?id=${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+        headers: {
+          'x-admin-token': token,
+          Authorization: `Bearer ${token}`,
+        },
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data.error || 'Failed to delete')
+      }
+      await load(view)
     } catch (e: any) {
       setError(e.message || 'Error')
     }
@@ -82,7 +103,7 @@ export default function ClientAdmin() {
   return (
     <div>
       <h1 className='font-semibold mb-7 text-rurikon-600 text-balance'>Guestbook Admin</h1>
-      <div className='flex gap-2'>
+      <div className='flex gap-2 items-center'>
         <input
           placeholder='Admin token'
           value={token}
@@ -93,11 +114,21 @@ export default function ClientAdmin() {
         <button
           onClick={() => {
             localStorage.setItem('guestbook_admin_token', token)
-            load()
+            load('pending')
           }}
           className='px-0 py-0 text-rurikon-600 underline underline-offset-2 hover:text-rurikon-700'
         >
           {loading ? 'Loading…' : 'Load pending'}
+        </button>
+        <button
+          onClick={() => {
+            localStorage.setItem('guestbook_admin_token', token)
+            setView('approved')
+            load('approved')
+          }}
+          className='px-0 py-0 text-rurikon-600 underline underline-offset-2 hover:text-rurikon-700'
+        >
+          {loading ? 'Loading…' : 'Load approved'}
         </button>
       </div>
       {error && <p className='mt-3 text-sm text-red-600'>{error}</p>}
@@ -112,18 +143,29 @@ export default function ClientAdmin() {
             </div>
             <p className='mt-1 break-words text-rurikon-600'>{it.message}</p>
             <div className='mt-2 flex gap-4'>
-              <button
-                onClick={() => approve(it.id, true)}
-                className='px-0 py-0 text-rurikon-600 underline underline-offset-2 hover:text-rurikon-700'
-              >
-                Approve
-              </button>
-              <button
-                onClick={() => approve(it.id, false)}
-                className='px-0 py-0 text-rurikon-300 underline underline-offset-2 hover:text-rurikon-500'
-              >
-                Reject
-              </button>
+              {view === 'pending' ? (
+                <>
+                  <button
+                    onClick={() => approve(it.id, true)}
+                    className='px-0 py-0 text-rurikon-600 underline underline-offset-2 hover:text-rurikon-700'
+                  >
+                    Approve
+                  </button>
+                  <button
+                    onClick={() => approve(it.id, false)}
+                    className='px-0 py-0 text-rurikon-300 underline underline-offset-2 hover:text-rurikon-500'
+                  >
+                    Reject
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={() => remove(it.id)}
+                  className='px-0 py-0 text-rurikon-300 underline underline-offset-2 hover:text-rurikon-500'
+                >
+                  Delete
+                </button>
+              )}
             </div>
             <div className='mt-5 h-px w-full bg-rurikon-border opacity-60' />
           </li>
