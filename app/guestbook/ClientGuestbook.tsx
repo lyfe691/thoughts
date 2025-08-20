@@ -86,6 +86,7 @@ export default function ClientGuestbook() {
       }
       const data = await res.json()
       const created: Entry | undefined = data.item
+      const approved: boolean = Boolean(data.approved ?? true)
       if (created?.id) {
         myIdsRef.current.add(created.id)
         try {
@@ -97,6 +98,12 @@ export default function ClientGuestbook() {
       }
       setName('')
       setMessage('')
+      if (approved && created) {
+        setItems((prev) => [created, ...prev])
+      }
+      if (!approved) {
+        setError('Submitted for review. It will appear after approval.')
+      }
       await fetchPage(0)
     } catch (e: any) {
       setError(e.message || 'Error')

@@ -43,6 +43,8 @@ async function ensureTable() {
       approved BOOLEAN NOT NULL DEFAULT TRUE,
       ip_hash TEXT
     );
+    ALTER TABLE guestbook ADD COLUMN IF NOT EXISTS approved BOOLEAN NOT NULL DEFAULT TRUE;
+    ALTER TABLE guestbook ADD COLUMN IF NOT EXISTS ip_hash TEXT;
     CREATE INDEX IF NOT EXISTS guestbook_created_at_idx ON guestbook (created_at DESC);
     CREATE INDEX IF NOT EXISTS guestbook_ip_hash_idx ON guestbook (ip_hash);
   `
@@ -142,7 +144,7 @@ export async function POST(req: NextRequest) {
     }
     memory.push(row)
     const { ip_hash, ...item } = row as any
-    return NextResponse.json({ item }, { status: 201 })
+    return NextResponse.json({ item, approved: row.approved !== false }, { status: 201 })
   }
 
   const recent = await sql<{ created_at: string }>`
@@ -168,7 +170,7 @@ export async function POST(req: NextRequest) {
     RETURNING id, name, message, created_at, updated_at, edited
   `
 
-  return NextResponse.json({ item: inserted.rows[0] }, { status: 201 })
+  return NextResponse.json({ item: inserted.rows[0], approved }, { status: 201 })
 }
 
 export async function PATCH(req: NextRequest) {
