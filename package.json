@@ -1,5 +1,5 @@
 {
-  "name": "shud.in",
+  "name": "thoughts.ysz.life",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -17,9 +17,10 @@
     "@tailwindcss/postcss": "4.0.15",
     "@types/mdx": "^2.0.12",
     "@vercel/analytics": "^1.5.0",
+    "@vercel/postgres": "^0.10.0",
     "clsx": "^2.1.0",
     "katex": "^0.16.11",
-    "next": "15.4.2-canary.1",
+    "next": "15.5.0",
     "next-mdx-remote": "^4.4.1",
     "react": "0.0.0-experimental-e1e74071-20250321",
     "react-dom": "0.0.0-experimental-e1e74071-20250321",
