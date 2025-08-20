@@ -36,6 +36,7 @@ export default function ClientAdmin() {
       const res = await fetch('/api/guestbook/admin', {
         headers: {
           'x-admin-token': token,
+          Authorization: `Bearer ${token}`,
         },
         cache: 'no-store',
       })
@@ -59,6 +60,7 @@ export default function ClientAdmin() {
         headers: {
           'Content-Type': 'application/json',
           'x-admin-token': token,
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({ id, approved }),
       })
