@@ -20,10 +20,35 @@ function useDb() {
   return Boolean(process.env.POSTGRES_URL || process.env.DATABASE_URL)
 }
 
-// Allow Neon setups that only expose DATABASE_URL
-if (!process.env.POSTGRES_URL && process.env.DATABASE_URL) {
-  process.env.POSTGRES_URL = process.env.DATABASE_URL
-}
+// Allow Neon/Vercel setups with variant env names
+;(function hydratePostgresEnv() {
+  if (process.env.POSTGRES_URL) return
+  const directCandidates = [
+    'POSTGRES_URL',
+    'DATABASE_URL',
+    'POSTGRES_POSTGRES_URL',
+    'POSTGRES_DATABASE_URL',
+    'POSTGRES_URL_NON_POOLING',
+    'POSTGRES_POSTGRES_URL_NON_POOLING',
+    'POSTGRES_DATABASE_URL_NON_POOLING',
+  ] as const
+  for (const key of directCandidates) {
+    const v = process.env[key as keyof NodeJS.ProcessEnv]
+    if (v) {
+      process.env.POSTGRES_URL = v
+      return
+    }
+  }
+  for (const [key, value] of Object.entries(process.env)) {
+    if (!value) continue
+    const k = key.toUpperCase()
+    if (/_PRISMA_/.test(k) || /NO_SSL/.test(k)) continue
+    if (/^POSTGRES_.*_URL$/.test(k) || /^POSTGRES_.*_DATABASE_URL$/.test(k)) {
+      process.env.POSTGRES_URL = value
+      return
+    }
+  }
+})()
 
 const MAX_LIMIT = 50
 const MAX_MESSAGE_LENGTH = 280

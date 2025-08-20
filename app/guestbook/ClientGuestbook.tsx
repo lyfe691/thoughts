@@ -98,13 +98,15 @@ export default function ClientGuestbook() {
       }
       setName('')
       setMessage('')
-      if (approved && created) {
-        setItems((prev) => [created, ...prev])
+      if (created) {
+        if (approved) {
+          setItems((prev) => [created, ...prev])
+        } else {
+          setError('Submitted for review. It will appear after approval.')
+        }
       }
-      if (!approved) {
-        setError('Submitted for review. It will appear after approval.')
-      }
-      await fetchPage(0)
+      // Best-effort refresh, but ignore failures so UI stays responsive
+      fetchPage(0).catch(() => {})
     } catch (e: any) {
       setError(e.message || 'Error')
     } finally {
