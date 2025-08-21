@@ -64,7 +64,11 @@ export default function ClientAdmin() {
           'x-admin-token': token,
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ id, approved }),
+        body: JSON.stringify(
+          approved
+            ? { id, approved: true }
+            : { id, approved: false, rejected: true }
+        ),
       })
       if (!res.ok) {
         const data = await res.json().catch(() => ({}))
@@ -114,6 +118,7 @@ export default function ClientAdmin() {
         <button
           onClick={() => {
             localStorage.setItem('guestbook_admin_token', token)
+            setView('pending')
             load('pending')
           }}
           className='px-0 py-0 text-rurikon-600 underline underline-offset-2 hover:text-rurikon-700'

@@ -15,7 +15,7 @@ type GuestbookRow = {
 }
 
 // In-memory fallback for local dev when Postgres isn't configured
-const memory: Array<GuestbookRow & { ip_hash?: string; approved?: boolean }> = []
+const memory: Array<GuestbookRow & { ip_hash?: string; approved?: boolean; rejected?: boolean }> = []
 function useDb() {
   return Boolean(process.env.POSTGRES_URL || process.env.DATABASE_URL)
 }
@@ -52,10 +52,17 @@ function useDb() {
 
 const MAX_LIMIT = 50
 const MAX_MESSAGE_LENGTH = 280
+const RATE_LIMIT_WINDOW_MS = 30_000
 
 function isAutoApprove() {
   const v = (process.env.GUESTBOOK_AUTO_APPROVE || 'true').toLowerCase()
   return v === '1' || v === 'true' || v === 'yes'
+}
+
+function isRateLimitEnabled() {
+  const v = (process.env.GUESTBOOK_DISABLE_RATE_LIMIT || 'false').toLowerCase()
+  const disabled = v === '1' || v === 'true' || v === 'yes'
+  return !disabled
 }
 
 async function ensureTable() {
@@ -70,11 +77,13 @@ async function ensureTable() {
         updated_at TIMESTAMPTZ,
         edited BOOLEAN NOT NULL DEFAULT FALSE,
         approved BOOLEAN NOT NULL DEFAULT TRUE,
-        ip_hash TEXT
+        ip_hash TEXT,
+        rejected BOOLEAN NOT NULL DEFAULT FALSE
       )
     `
     await sql`ALTER TABLE guestbook ADD COLUMN IF NOT EXISTS approved BOOLEAN NOT NULL DEFAULT TRUE`
     await sql`ALTER TABLE guestbook ADD COLUMN IF NOT EXISTS ip_hash TEXT`
+    await sql`ALTER TABLE guestbook ADD COLUMN IF NOT EXISTS rejected BOOLEAN NOT NULL DEFAULT FALSE`
     await sql`CREATE INDEX IF NOT EXISTS guestbook_created_at_idx ON guestbook (created_at DESC)`
     await sql`CREATE INDEX IF NOT EXISTS guestbook_ip_hash_idx ON guestbook (ip_hash)`
   } catch {
@@ -102,7 +111,7 @@ export async function GET(req: NextRequest) {
   if (!useDb()) {
     const items = memory
       .slice()
-      .filter((a) => a.approved !== false)
+      .filter((a) => a.approved !== false && a.rejected !== true)
       .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
       .slice(offset, offset + limit)
     return NextResponse.json({ items })
@@ -112,7 +121,7 @@ export async function GET(req: NextRequest) {
     const { rows } = await sql<GuestbookRow>`
       SELECT id, name, message, created_at, updated_at, edited
       FROM guestbook
-      WHERE approved = TRUE
+      WHERE approved = TRUE AND rejected = FALSE
       ORDER BY created_at DESC, id DESC
       LIMIT ${limit} OFFSET ${offset}
     `
@@ -152,8 +161,19 @@ export async function POST(req: NextRequest) {
   const safeName = name ? String(name).slice(0, 50).trim() : null
 
   if (!useDb()) {
+    if (isRateLimitEnabled()) {
+      const lastForIp = memory
+        .filter((r) => r.ip_hash === ipHash)
+        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0]
+      if (lastForIp) {
+        const last = new Date(lastForIp.created_at).getTime()
+        if (Date.now() - last < RATE_LIMIT_WINDOW_MS) {
+          return NextResponse.json({ error: 'rate_limited' }, { status: 429 })
+        }
+      }
+    }
     const id = crypto.randomUUID()
-    const row: GuestbookRow & { ip_hash: string; approved?: boolean } = {
+    const row: GuestbookRow & { ip_hash: string; approved?: boolean; rejected?: boolean } = {
       id,
       name: safeName,
       message: trimmed,
@@ -162,20 +182,36 @@ export async function POST(req: NextRequest) {
       edited: false,
       ip_hash: ipHash,
       approved: isAutoApprove(),
+      rejected: false,
     }
     memory.push(row)
     const { ip_hash, ...item } = row as any
     return NextResponse.json({ item, approved: row.approved !== false }, { status: 201 })
   }
 
-  
+  if (isRateLimitEnabled()) {
+    const recent = await sql<{ created_at: string }>`
+      SELECT created_at FROM guestbook
+      WHERE ip_hash = ${ipHash}
+      ORDER BY created_at DESC
+      LIMIT 1
+    `
+    if (recent.rows.length > 0) {
+      const last = new Date(recent.rows[0].created_at).getTime()
+      const now = Date.now()
+      if (now - last < RATE_LIMIT_WINDOW_MS) {
+        return NextResponse.json({ error: 'rate_limited' }, { status: 429 })
+      }
+    }
+  }
 
   const id = crypto.randomUUID()
   const approved = isAutoApprove()
+  const rejected = false
 
   const inserted = await sql<GuestbookRow>`
-    INSERT INTO guestbook (id, name, message, ip_hash, approved)
-    VALUES (${id}, ${safeName}, ${trimmed}, ${ipHash}, ${approved})
+    INSERT INTO guestbook (id, name, message, ip_hash, approved, rejected)
+    VALUES (${id}, ${safeName}, ${trimmed}, ${ipHash}, ${approved}, ${rejected})
     RETURNING id, name, message, created_at, updated_at, edited
   `
 

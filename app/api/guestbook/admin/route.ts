@@ -68,11 +68,13 @@ async function ensureTable() {
         updated_at TIMESTAMPTZ,
         edited BOOLEAN NOT NULL DEFAULT FALSE,
         approved BOOLEAN NOT NULL DEFAULT TRUE,
-        ip_hash TEXT
+        ip_hash TEXT,
+        rejected BOOLEAN NOT NULL DEFAULT FALSE
       )
     `
     await sql`ALTER TABLE guestbook ADD COLUMN IF NOT EXISTS approved BOOLEAN NOT NULL DEFAULT TRUE`
     await sql`ALTER TABLE guestbook ADD COLUMN IF NOT EXISTS ip_hash TEXT`
+    await sql`ALTER TABLE guestbook ADD COLUMN IF NOT EXISTS rejected BOOLEAN NOT NULL DEFAULT FALSE`
   } catch {
     // ignore DDL errors
   }
@@ -95,15 +97,15 @@ export async function GET(req: NextRequest) {
     const { rows } =
       status === 'approved'
         ? await sql`
-            SELECT id, name, message, created_at, updated_at, edited, approved
+            SELECT id, name, message, created_at, updated_at, edited, approved, rejected
             FROM guestbook
-            WHERE approved = TRUE
+            WHERE approved = TRUE AND rejected = FALSE
             ORDER BY created_at DESC, id DESC
           `
         : await sql`
-            SELECT id, name, message, created_at, updated_at, edited, approved
+            SELECT id, name, message, created_at, updated_at, edited, approved, rejected
             FROM guestbook
-            WHERE approved = FALSE
+            WHERE approved = FALSE AND rejected = FALSE
             ORDER BY created_at ASC
           `
     return NextResponse.json({ items: rows })
@@ -124,10 +126,11 @@ export async function PATCH(req: NextRequest) {
   const body = await req.json().catch(() => ({} as any))
   const id = (body.id || '').trim()
   const approved = Boolean(body.approved)
+  const rejected = body.hasOwnProperty('approved') ? !approved : Boolean(body.rejected)
   if (!id) return NextResponse.json({ error: 'missing_id' }, { status: 400 })
 
   try {
-    await sql`UPDATE guestbook SET approved = ${approved} WHERE id = ${id}`
+    await sql`UPDATE guestbook SET approved = ${approved}, rejected = ${rejected} WHERE id = ${id}`
     return NextResponse.json({ ok: true })
   } catch {
     return NextResponse.json({ error: 'db_error' }, { status: 500 })
