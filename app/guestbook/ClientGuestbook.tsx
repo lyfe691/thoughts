@@ -22,8 +22,7 @@ export default function ClientGuestbook() {
   const [name, setName] = useState('')
   const [message, setMessage] = useState('')
   const [submitting, setSubmitting] = useState(false)
-  const [editingId, setEditingId] = useState<string | null>(null)
-  const [editingValue, setEditingValue] = useState('')
+  
   const honeypot = useRef<HTMLInputElement | null>(null)
   const myIdsRef = useRef<Set<string>>(new Set())
 
@@ -119,25 +118,7 @@ export default function ClientGuestbook() {
     }
   }
 
-  async function onSaveEdit(id: string) {
-    if (!editingValue.trim()) return
-    try {
-      const res = await fetch('/api/guestbook', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, message: editingValue.trim() }),
-      })
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}))
-        throw new Error(data.error || 'Failed to edit')
-      }
-      setEditingId(null)
-      setEditingValue('')
-      await fetchPage(0)
-    } catch (e: any) {
-      setError(e.message || 'Error')
-    }
-  }
+  
 
   const canSubmit = message.trim().length > 0 && message.trim().length <= 280
   const isMine = (id: string) => myIdsRef.current.has(id)
@@ -207,50 +188,10 @@ export default function ClientGuestbook() {
                   <span className='text-rurikon-400'>{it.name || 'Anonymous'}</span>
                   <span className='mx-2 text-rurikon-200'>·</span>
                   <time dateTime={it.created_at}>{dateFmt.format(new Date(it.created_at))}</time>
-                  {it.edited && <span className='ml-2'>(edited)</span>}
                 </div>
-                {editingId === it.id ? (
-                  <div className='mt-2 flex gap-2'>
-                    <input
-                      value={editingValue}
-                      onChange={(e) => setEditingValue(e.target.value)}
-                      className='flex-1 min-w-0 bg-transparent px-0 py-1 outline-none border-0 border-b border-rurikon-border rounded-none focus-visible:ring-0 focus-visible:border-rurikon-400'
-                      maxLength={280}
-                    />
-                    <button
-                      onClick={() => onSaveEdit(it.id)}
-                      className='px-0 py-0 text-rurikon-600 underline underline-offset-2 hover:text-rurikon-700'
-                      type='button'
-                    >
-                      Save
-                    </button>
-                    <button
-                      onClick={() => {
-                        setEditingId(null)
-                        setEditingValue('')
-                      }}
-                      className='px-0 py-0 text-rurikon-600 underline underline-offset-2 hover:text-rurikon-700'
-                      type='button'
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                ) : (
-                  <p className='mt-1 break-words text-rurikon-600'>{it.message}</p>
-                )}
+                <p className='mt-1 break-words text-rurikon-600'>{it.message}</p>
               </div>
-              {editingId === it.id ? null : isMine(it.id) && (
-                <button
-                  onClick={() => {
-                    setEditingId(it.id)
-                    setEditingValue(it.message)
-                  }}
-                  className='opacity-0 group-hover:opacity-100 transition-opacity px-0 py-0 text-rurikon-600 underline underline-offset-2 hover:text-rurikon-700'
-                >
-                  Edit
-                </button>
-              )}
-              {isMine(it.id) && editingId !== it.id && (
+              {isMine(it.id) && (
                 <button
                   onClick={() => onDelete(it.id)}
                   className='opacity-0 group-hover:opacity-100 transition-opacity px-0 py-0 text-rurikon-300 underline underline-offset-2 hover:text-rurikon-500 ml-3'

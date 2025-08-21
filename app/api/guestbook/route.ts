@@ -218,50 +218,8 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({ item: inserted.rows[0], approved }, { status: 201 })
 }
 
-export async function PATCH(req: NextRequest) {
-  await ensureTable()
-
-  const ipHash = getClientIpHash(req)
-  let body: { id?: string; message?: string } = {}
-  try {
-    body = await req.json()
-  } catch {}
-
-  const id = (body.id || '').trim()
-  const trimmed = (body.message || '').trim()
-
-  if (!id) return NextResponse.json({ error: 'missing_id' }, { status: 400 })
-  if (trimmed.length === 0 || trimmed.length > MAX_MESSAGE_LENGTH)
-    return NextResponse.json({ error: 'invalid_message' }, { status: 400 })
-
-  if (!useDb()) {
-    const idx = memory.findIndex((r) => r.id === id && r.ip_hash === ipHash)
-    if (idx === -1) return NextResponse.json({ error: 'forbidden' }, { status: 403 })
-    memory[idx] = {
-      ...memory[idx],
-      message: trimmed,
-      edited: true,
-      updated_at: new Date().toISOString(),
-    }
-    const { ip_hash, ...item } = memory[idx] as any
-    return NextResponse.json({ item })
-  }
-
-  const owner = await sql<{ id: string }>`
-    SELECT id FROM guestbook WHERE id = ${id} AND ip_hash = ${ipHash} LIMIT 1
-  `
-  if (owner.rows.length === 0) {
-    return NextResponse.json({ error: 'forbidden' }, { status: 403 })
-  }
-
-  const updated = await sql<GuestbookRow>`
-    UPDATE guestbook
-    SET message = ${trimmed}, edited = TRUE, updated_at = NOW()
-    WHERE id = ${id}
-    RETURNING id, name, message, created_at, updated_at, edited
-  `
-
-  return NextResponse.json({ item: updated.rows[0] })
+export async function PATCH() {
+  return NextResponse.json({ error: 'editing_disabled' }, { status: 405 })
 }
 
 export async function DELETE(req: NextRequest) {
